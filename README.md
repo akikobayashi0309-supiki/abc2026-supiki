@@ -3,7 +3,7 @@
 > Project name and pitch TBD. This repository currently contains the end-to-end foundation:
 > Firebase Hosting -> Cloud Run -> Gemini (Vertex AI) -> Firestore.
 
-**Live demo:** `https://<PROJECT_ID>.web.app` (guest mode: no sign-up required)
+**Live demo:** https://abc2026-supiki.web.app (guest mode: no sign-up required)
 
 ## Architecture
 
