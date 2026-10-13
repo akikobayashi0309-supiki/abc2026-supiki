@@ -64,12 +64,14 @@ gcloud services enable \
   compute.googleapis.com \
   aiplatform.googleapis.com \
   firestore.googleapis.com \
+  firebaserules.googleapis.com \
   firebase.googleapis.com \
   firebasehosting.googleapis.com \
   identitytoolkit.googleapis.com \
   secretmanager.googleapis.com \
   iam.googleapis.com \
   iamcredentials.googleapis.com \
+  sts.googleapis.com \
   cloudresourcemanager.googleapis.com \
   billingbudgets.googleapis.com
 
