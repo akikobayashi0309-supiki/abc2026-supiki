@@ -22,7 +22,7 @@ Firebase Hosting ── /api/** rewrite ──▶ Cloud Run (FastAPI, asia-north
 | Service | Usage |
 |---|---|
 | **Firebase** | Hosting serves the React app and routes `/api/**` to Cloud Run on the same origin. Auth provides Google sign-in plus anonymous guest mode so judges can try the app instantly. |
-| **Firestore** | Stores each user's generations (`generations` collection). Only the backend accesses it; client access is denied by security rules. |
+| **Firestore** | Stores each user's generations under `users/{uid}/generations`. Only the backend accesses it; client access is denied by security rules. |
 | **Cloud Run** | Hosts the FastAPI backend. It runs as a dedicated least-privilege service account and calls Gemini and Firestore with no API keys. |
 | **Gemini** | Called through Vertex AI with the `google-genai` SDK. *(Core feature description TBD.)* |
 

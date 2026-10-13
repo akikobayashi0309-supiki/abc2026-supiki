@@ -6,12 +6,15 @@ from google.cloud import firestore
 
 from app.config import get_settings
 
-COLLECTION = "generations"
-
 
 @lru_cache
 def _db() -> firestore.Client:
     return firestore.Client(project=get_settings().google_cloud_project or None)
+
+
+def _generations(uid: str) -> firestore.CollectionReference:
+    # Per-user subcollection: ordering by createdAt needs no composite index.
+    return _db().collection("users").document(uid).collection("generations")
 
 
 class Store:
@@ -23,15 +26,13 @@ class Store:
             "model": model,
             "createdAt": datetime.now(UTC),
         }
-        ref = _db().collection(COLLECTION).document()
+        ref = _generations(uid).document()
         ref.set(doc)
         return {"id": ref.id, **doc}
 
     def list_generations(self, uid: str, limit: int) -> list[dict[str, Any]]:
         query = (
-            _db()
-            .collection(COLLECTION)
-            .where(filter=firestore.FieldFilter("uid", "==", uid))
+            _generations(uid)
             .order_by("createdAt", direction=firestore.Query.DESCENDING)
             .limit(limit)
         )
