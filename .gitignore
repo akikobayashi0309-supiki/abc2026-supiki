@@ -1,0 +1,27 @@
+# Internal Japanese handoff notes (public repo must be English-only)
+HANDOFF.md
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Local env overrides
+.env.local
+*.local
