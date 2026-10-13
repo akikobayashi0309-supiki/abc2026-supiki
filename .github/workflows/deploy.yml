@@ -18,7 +18,7 @@ jobs:
   backend:
     # Skip until infra/github-wif.sh has been run and the variables are set.
     if: vars.GCP_PROJECT_ID != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write # Required for Workload Identity Federation
@@ -51,7 +51,7 @@ jobs:
   frontend:
     # Runs after the backend so the /api rewrite target always exists.
     needs: backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
