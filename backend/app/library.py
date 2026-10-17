@@ -11,10 +11,24 @@ class Video:
     credit: str
 
 
-# Creative Commons films from the Blender Foundation (attribution required).
+# Creative Commons films (attribution required; see README credits).
 LIBRARY: dict[str, Video] = {
     v.id: v
     for v in [
+        Video(
+            id="pepper-and-carrot",
+            title="Pepper&Carrot: The Potion Contest",
+            path="library/pepper-and-carrot.mp4",
+            duration=455,
+            synopsis=(
+                "Anime-style fantasy: young witch Pepper and her cat Carrot enter a village "
+                "potion contest against rival witches, including Shichimi and Saffron."
+            ),
+            credit=(
+                "Morevna Project, based on the webcomic by David Revoy "
+                "(peppercarrot.com) — CC BY-SA 4.0"
+            ),
+        ),
         Video(
             id="tears-of-steel",
             title="Tears of Steel",

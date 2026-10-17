@@ -37,7 +37,7 @@ def test_jobs_require_auth():
 
 def test_library(client):
     ids = [v["id"] for v in client.get("/api/library").json()]
-    assert ids == ["tears-of-steel", "sintel"]
+    assert ids == ["pepper-and-carrot", "tears-of-steel", "sintel"]
 
 
 def test_create_job_runs_pipeline(client, store):

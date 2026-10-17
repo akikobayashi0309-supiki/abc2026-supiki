@@ -20,6 +20,11 @@ import { auth } from './firebase'
 import { JobView } from './JobView'
 
 const EXAMPLES: Record<string, string[]> = {
+  'pepper-and-carrot': [
+    'A TikTok of the potion contest climax for anime fans in Japan',
+    'Instagram Reels of Pepper meeting her rivals for teens in South Korea',
+    'A YouTube Shorts teaser of the funniest moment for families in Saudi Arabia',
+  ],
   'tears-of-steel': [
     'Instagram Reels of the breakup on the bridge for anime fans in Japan',
     'A 20-second TikTok of the moment the simulation goes wrong, for teens in Indonesia',
@@ -39,7 +44,7 @@ function formatDuration(seconds: number) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [videos, setVideos] = useState<Video[]>([])
-  const [videoId, setVideoId] = useState('tears-of-steel')
+  const [videoId, setVideoId] = useState('pepper-and-carrot')
   const [prompt, setPrompt] = useState('')
   const [jobs, setJobs] = useState<JobSummary[]>([])
   const [job, setJob] = useState<Job | null>(null)

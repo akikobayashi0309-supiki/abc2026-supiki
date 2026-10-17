@@ -102,10 +102,11 @@ All endpoints except `/api/healthz` require a Firebase ID token.
 
 ## Credits
 
-Source footage is from Blender Foundation open movies, used under Creative Commons Attribution 3.0:
+Source footage is used under Creative Commons licenses:
 
-- *Tears of Steel* — (CC) Blender Foundation | mango.blender.org
-- *Sintel* — (CC) Blender Foundation | durian.blender.org
+- *Pepper&Carrot Motion Comic, Episode 6: The Potion Contest* — Morevna Project (morevnaproject.org), based on the webcomic *Pepper&Carrot* by David Revoy (peppercarrot.com). CC BY-SA 4.0. Clips generated from it are shared under the same license.
+- *Tears of Steel* — (CC) Blender Foundation | mango.blender.org. CC BY 3.0.
+- *Sintel* — (CC) Blender Foundation | durian.blender.org. CC BY 3.0.
 
 ## License
 

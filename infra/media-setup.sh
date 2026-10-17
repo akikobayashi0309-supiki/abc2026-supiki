@@ -42,7 +42,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --role="roles/storage.objectViewer" >/dev/null
 echo "    Done."
 
-echo "==> 3/4 Download and prepare Creative Commons films (Blender Foundation, CC BY 3.0)"
+echo "==> 3/4 Download and prepare Creative Commons films"
 command -v ffmpeg >/dev/null || sudo apt-get install -y ffmpeg >/dev/null
 mkdir -p "$WORKDIR" && cd "$WORKDIR"
 if [[ ! -f tears-of-steel.mp4 ]]; then
@@ -57,6 +57,14 @@ if [[ ! -f sintel.mp4 ]]; then
     -b:a 128k -movflags +faststart sintel.mp4
 fi
 
+if [[ ! -f pepper-and-carrot.mp4 ]]; then
+  # Morevna Project / David Revoy, CC BY-SA 4.0
+  curl -fL -o pc6.mp4 https://archive.org/download/pepper-and-carrot-ep6-v1/pepper-and-carrot-ep6-en-v1.mp4
+  ffmpeg -v error -y -i pc6.mp4 -vf scale=-2:720 -c:v libx264 -preset fast -crf 22 -c:a aac \
+    -b:a 128k -ac 2 -movflags +faststart pepper-and-carrot.mp4
+fi
+
 echo "==> 4/4 Upload to gs://${BUCKET}/library/"
-gcloud storage cp tears-of-steel.mp4 sintel.mp4 "gs://${BUCKET}/library/" --project="$PROJECT_ID"
+gcloud storage cp tears-of-steel.mp4 sintel.mp4 pepper-and-carrot.mp4 "gs://${BUCKET}/library/" \
+  --project="$PROJECT_ID"
 echo "Done."

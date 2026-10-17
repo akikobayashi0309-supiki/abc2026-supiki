@@ -118,7 +118,7 @@ h3 {
 
 .videos {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -137,7 +137,7 @@ h3 {
 
 .video img {
   width: 100%;
-  aspect-ratio: 2.35;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
   display: block;
 }
