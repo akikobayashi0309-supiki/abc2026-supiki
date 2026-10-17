@@ -21,9 +21,9 @@ import { JobView } from './JobView'
 
 const EXAMPLES: Record<string, string[]> = {
   'tears-of-steel': [
-    'A 20-second TikTok of the robot attack for gamers in Brazil',
-    'Instagram Reels teaser of the most intense moment for fans in Saudi Arabia',
-    'YouTube Shorts clip with the funniest line for viewers in Indonesia',
+    'Instagram Reels of the breakup on the bridge for anime fans in Japan',
+    'A 20-second TikTok of the moment the simulation goes wrong, for teens in Indonesia',
+    'A YouTube Shorts teaser of the robot attack for gamers in Brazil',
   ],
   sintel: [
     'A Reels clip of Sintel meeting the baby dragon for families in the UAE',
