@@ -60,8 +60,9 @@ def test_normalize_index_rescales_overshooting_timeline():
     fixed = normalize_index(stretched, duration=600)
     assert [(s.start, s.end) for s in fixed.scenes] == [(0, 300), (300, 600)]
 
-    ok = SceneIndex(scenes=[scene(0, 590)])
-    assert normalize_index(ok, duration=600) is ok
+    # End before start (seen in real output) is clamped instead of rescaled.
+    odd = normalize_index(SceneIndex(scenes=[scene(0, 300), scene(590, 469)]), duration=600)
+    assert [(s.start, s.end) for s in odd.scenes] == [(0, 300), (590, 590)]
 
 
 def test_hashtags_are_normalized():

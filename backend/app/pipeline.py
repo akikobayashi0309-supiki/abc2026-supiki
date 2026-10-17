@@ -35,15 +35,12 @@ def clamp_selection(sel: Selection, duration: float, max_seconds: int) -> Select
 def normalize_index(index: SceneIndex, duration: float) -> SceneIndex:
     """Rescale timestamps if the model's timeline overshoots the real film length."""
     last = max((scene.end for scene in index.scenes), default=0.0)
-    if last <= duration * 1.02:
-        return index
-    ratio = duration / last
-    scenes = [
-        scene.model_copy(
-            update={"start": round(scene.start * ratio, 2), "end": round(scene.end * ratio, 2)}
-        )
-        for scene in index.scenes
-    ]
+    ratio = duration / last if last > duration * 1.02 else 1.0
+    scenes = []
+    for scene in index.scenes:
+        start = min(round(scene.start * ratio, 2), duration)
+        end = min(max(round(scene.end * ratio, 2), start), duration)
+        scenes.append(scene.model_copy(update={"start": start, "end": end}))
     return SceneIndex(scenes=scenes)
 
 
@@ -110,7 +107,7 @@ class Pipeline:
     def scene_index(self) -> SceneIndex:
         cached = self.store.get_index(self.video.id)
         if cached:
-            return SceneIndex.model_validate(cached)
+            return normalize_index(SceneIndex.model_validate(cached), self.video.duration)
         minutes, seconds = divmod(self.video.duration, 60)
         prompt = (
             "Index this film for scene search. It is exactly "
@@ -133,8 +130,11 @@ class Pipeline:
     def search(self, plan: Plan, index: SceneIndex) -> Selection:
         prompt = (
             "Pick the single best continuous moment for this promo brief from the scene "
-            "index of the film. It may span adjacent scenes. Prefer moments that are "
-            "striking without context and that include dialogue.\n"
+            "index of the film. It may span adjacent scenes. The clip will be subtitled in "
+            "the target language, so it must include at least one scene whose dialogue is "
+            "not empty, and the spoken lines should land early in the clip. Start the clip "
+            "at the start time of a scene in the index. Prefer moments that are striking "
+            "without context.\n"
             f"Brief: {plan.model_dump_json(by_alias=True)}\n"
             f"Film length: {self.video.duration} seconds. The clip must be at most "
             f"{plan.max_seconds} seconds.\n"
