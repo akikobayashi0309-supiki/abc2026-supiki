@@ -357,6 +357,13 @@ textarea {
   font-size: 0.75rem;
 }
 
+.steps .model {
+  grid-column: 2;
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .steps .done .icon {
   color: var(--ok);
 }

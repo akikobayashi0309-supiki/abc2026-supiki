@@ -9,7 +9,7 @@ export type Video = {
 }
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
-export type Step = { status: StepStatus; detail?: string }
+export type Step = { status: StepStatus; detail?: string; model?: string }
 
 export type SubtitleLine = {
   start: number

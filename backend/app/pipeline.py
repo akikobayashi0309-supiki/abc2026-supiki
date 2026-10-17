@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 STEPS = ["plan", "search", "subtitles", "cut", "culture", "render", "assets"]
 MIN_SECONDS = 5
+GEMINI_STEPS = {"plan", "search", "subtitles", "culture", "assets"}
 # Transcribe this much extra footage around the selection to snap to real dialogue.
 WINDOW_PAD = 20.0
 
@@ -123,7 +124,10 @@ class Pipeline:
 
     def _step(self, name: str, status: str, detail: str = "", **data: Any) -> None:
         self.current = name
-        self._update({f"steps.{name}": {"status": status, "detail": detail}, **data})
+        step = {"status": status, "detail": detail}
+        if status == "done" and name in GEMINI_STEPS:
+            step["model"] = getattr(self.gemini, "last_model", "")
+        self._update({f"steps.{name}": step, **data})
 
     def _out(self, path: str) -> str:
         return f"outputs/{self.uid}/{self.job_id}/{path}"

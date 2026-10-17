@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import TypeVar
 
@@ -9,7 +10,12 @@ from app.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
 
+log = logging.getLogger(__name__)
+
 RETRYABLE = {429, 500, 503, 504}
+# Fall back to the stable model on these (quota, missing or retired model, outages).
+FALLBACK_ON = RETRYABLE | {404}
+BACKOFF = [2, 5, 10, 20]
 
 
 def _new_client() -> genai.Client:
@@ -31,31 +37,49 @@ def video_part(gcs_uri: str, low_res: bool = False) -> types.Part:
 
 
 def _with_retry(call):
-    for attempt in range(3):
+    for delay in [*BACKOFF, None]:
         try:
             return call()
         except errors.APIError as exc:
-            if exc.code not in RETRYABLE or attempt == 2:
+            if exc.code not in RETRYABLE or delay is None:
                 raise
-            time.sleep(2 * (attempt + 1))
+            time.sleep(delay)
 
 
 class Gemini:
     def __init__(self) -> None:
         # One client per job: a shared client was closed under concurrent jobs.
         self.client = _new_client()
+        # Model that served the most recent call (shown in the UI).
+        self.last_model = ""
+
+    def _generate(self, models: list[str], contents: list, config: types.GenerateContentConfig):
+        for i, model in enumerate(models):
+            try:
+                response = _with_retry(
+                    lambda m=model: self.client.models.generate_content(
+                        model=m, contents=contents, config=config
+                    )
+                )
+                self.last_model = model
+                return response
+            except errors.APIError as exc:
+                if exc.code not in FALLBACK_ON or i == len(models) - 1:
+                    raise
+                log.warning("%s failed with %s; falling back to %s", model, exc.code, models[i + 1])
+
+    def _chain(self, model: str, fallback: str) -> list[str]:
+        return [model] if model == fallback else [model, fallback]
 
     def structured(self, model: str, contents: list, schema: type[T]) -> T:
         """Generate JSON constrained to `schema` and parse it."""
-        response = _with_retry(
-            lambda: self.client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                ),
-            )
+        response = self._generate(
+            self._chain(model, get_settings().fallback_model),
+            contents,
+            types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=schema,
+            ),
         )
         if isinstance(response.parsed, schema):
             return response.parsed
@@ -63,18 +87,13 @@ class Gemini:
 
     def image(self, model: str, prompt: str, reference_jpeg: bytes, aspect_ratio: str) -> bytes:
         """Generate an image from a reference frame and return PNG/JPEG bytes."""
-        response = _with_retry(
-            lambda: self.client.models.generate_content(
-                model=model,
-                contents=[
-                    types.Part.from_bytes(data=reference_jpeg, mime_type="image/jpeg"),
-                    prompt,
-                ],
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
-                ),
-            )
+        response = self._generate(
+            self._chain(model, get_settings().image_fallback_model),
+            [types.Part.from_bytes(data=reference_jpeg, mime_type="image/jpeg"), prompt],
+            types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
+            ),
         )
         for candidate in response.candidates or []:
             for part in candidate.content.parts or []:

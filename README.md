@@ -26,14 +26,14 @@ Request ─▶ 1 Plan ─▶ 2 Search ─▶ 3 Cut ─▶ 4 Subtitles ─▶ 5 C
 | Step | What happens | Model |
 |---|---|---|
 | Plan | Turns the free-text request into a brief: market, language, platform, length, tone | `gemini-4-argon` |
-| Search | Picks the best moment from a scene index of the film (start, end, dialogue, characters, mood). The index is built once per film from the video itself, then cached in Firestore | `gemini-3.8-flash` (index), `gemini-4-argon` (selection) |
+| Search | Picks the best moment from a scene index of the film (start, end, dialogue, characters, mood). The index is built once per film from the video itself, then cached in Firestore | `gemini-4-argon` (video + text) |
 | Cut | Cuts the moment and converts it to 9:16 over a blurred background | ffmpeg on Cloud Run |
-| Subtitles | Transcribes each spoken line from the clip with timings and translates it for the market | `gemini-3.8-flash` (video input) |
+| Subtitles | Transcribes each spoken line around the scene with timings, snaps the clip onto real dialogue, and translates it for the market | `gemini-4-argon` (video input) |
 | Cultural check | Watches the clip with its subtitles and reports market-specific risks with time, severity and a fix. It rewrites subtitle lines that need it, writes the caption and hashtags, and picks the thumbnail frame | `gemini-4-argon` (video input) |
 | Render | Burns the reviewed subtitles into the clip (Noto fonts for Latin, CJK, Arabic, Thai, and more) | ffmpeg |
-| Assets | Exports the chosen keyframe and generates a localized 9:16 cover with the title in the local language | `gemini-3.1-flash-image` |
+| Assets | Exports the chosen keyframe and generates a localized 9:16 cover with the title in the local language | `gemini-nano-banana-2.1` |
 
-Every step reports its progress, so the UI shows the agent working in real time. If an optional step fails (for example, thumbnail generation), the job still delivers the clip.
+Every step uses the latest Gemini model and falls back automatically to a stable model (`gemini-3.8-flash`, `gemini-3.1-flash-image`) on quota or availability errors; the UI shows which model served each step. Every step reports its progress, so the UI shows the agent working in real time. If an optional step fails (for example, thumbnail generation), the job still delivers the clip.
 
 ## How we use Google Cloud
 

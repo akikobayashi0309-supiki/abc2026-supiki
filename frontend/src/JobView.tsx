@@ -70,6 +70,7 @@ export function JobView({ job }: { job: Job }) {
               <span className="icon">{ICONS[step.status]}</span>
               <span className="label">{STEP_LABELS[name]}</span>
               {step.detail && <span className="detail">{step.detail}</span>}
+              {step.model && <span className="model">{step.model}</span>}
             </li>
           )
         })}
