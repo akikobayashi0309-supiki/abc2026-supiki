@@ -2,20 +2,30 @@
 
 import json
 import logging
+import time
+from datetime import date
 from typing import Any
 
 from app.config import Settings
 from app.gemini import Gemini, video_part
 from app.library import Video
 from app.media import Media
-from app.schemas import CultureReport, Plan, SceneIndex, Selection, SubtitleLine, Subtitles
+from app.schemas import (
+    CultureReport,
+    LibrarySelection,
+    Plan,
+    SceneIndex,
+    Selection,
+    SubtitleLine,
+    Subtitles,
+)
 from app.store import Store
 
 log = logging.getLogger(__name__)
 
-STEPS = ["plan", "search", "subtitles", "cut", "culture", "render", "assets"]
+STEPS = ["plan", "trends", "search", "subtitles", "cut", "culture", "render", "assets"]
 MIN_SECONDS = 5
-GEMINI_STEPS = {"plan", "search", "subtitles", "culture", "assets"}
+GEMINI_STEPS = {"plan", "trends", "search", "subtitles", "culture", "assets"}
 # Transcribe this much extra footage around the selection to snap to real dialogue.
 WINDOW_PAD = 20.0
 
@@ -100,22 +110,57 @@ def _dump(model: Any) -> Any:
     return model.model_dump(by_alias=True)
 
 
+def build_index(
+    gemini: Gemini, media: Media, store: Store, settings: Settings, video: Video
+) -> SceneIndex:
+    """Scene index for a video, built once with Gemini video understanding and cached."""
+    cached = store.get_index(video.id)
+    if cached:
+        return normalize_index(SceneIndex.model_validate(cached), video.duration)
+    minutes, seconds = divmod(video.duration, 60)
+    prompt = (
+        "Index this video for scene search. It is exactly "
+        f"{minutes}:{seconds:02d} (MM:SS) long, i.e. {video.duration} seconds. Split it "
+        "into consecutive scenes of roughly 5-40 seconds covering the whole video. Read "
+        "each timestamp as MM:SS from the video timeline and convert it to seconds; no "
+        f"value may exceed {video.duration}. For each scene give start and end, a "
+        "visual description, the spoken dialogue verbatim, the characters on screen and "
+        "the mood. Also write a one-paragraph summary of the whole video."
+    )
+    index = gemini.structured(
+        settings.video_model, [video_part(media.gcs_uri(video.path)), prompt], SceneIndex
+    )
+    index = normalize_index(index, video.duration)
+    store.save_index(video.id, _dump(index))
+    return index
+
+
 class Pipeline:
     def __init__(
         self,
         uid: str,
         job_id: str,
-        video: Video,
+        candidates: list[Video],
         request: str,
         gemini: Gemini,
         media: Media,
         store: Store,
         settings: Settings,
+        leader_id: str | None = None,
     ) -> None:
-        self.uid, self.job_id, self.video, self.request = uid, job_id, video, request
+        """`candidates` holds one video, or several when the agent should pick the film.
+
+        `leader_id` makes this job reuse the clip chosen by another job in the same
+        market-comparison batch, so every market reviews the same footage.
+        """
+        self.uid, self.job_id, self.request = uid, job_id, request
+        self.candidates = candidates
+        self.video = candidates[0]
         self.gemini, self.media, self.store, self.settings = gemini, media, store, settings
+        self.leader_id = leader_id
         self.outputs: dict[str, str] = {}
         self.current = ""
+        self.trends = ""
 
     # -- bookkeeping -------------------------------------------------------
 
@@ -132,57 +177,96 @@ class Pipeline:
     def _out(self, path: str) -> str:
         return f"outputs/{self.uid}/{self.job_id}/{path}"
 
+    def _source(self) -> str:
+        if len(self.candidates) > 1:
+            return "a library of videos: " + "; ".join(
+                f"{v.title} — {v.synopsis}" for v in self.candidates
+            )
+        return f"{self.video.title} — {self.video.synopsis}"
+
     # -- steps -------------------------------------------------------------
 
     def plan(self) -> Plan:
         prompt = (
             "You are a localization producer for game and anime marketing. Turn the request "
             "below into a production brief for a vertical short-form promo clip.\n"
-            f"Source title: {self.video.title} — {self.video.synopsis}\n"
+            f"Source: {self._source()}\n"
             f"Request: {self.request}\n"
             "If the market or platform is not stated, choose sensible defaults "
             "(platform TikTok, 30 seconds). maxSeconds must be between 10 and 60."
         )
         return self.gemini.structured(self.settings.reasoning_model, [prompt], Plan)
 
-    def scene_index(self) -> SceneIndex:
-        cached = self.store.get_index(self.video.id)
-        if cached:
-            return normalize_index(SceneIndex.model_validate(cached), self.video.duration)
-        minutes, seconds = divmod(self.video.duration, 60)
+    def research_trends(self, plan: Plan) -> tuple[str, list[dict]]:
         prompt = (
-            "Index this film for scene search. It is exactly "
-            f"{minutes}:{seconds:02d} (MM:SS) long, i.e. {self.video.duration} seconds. Split it "
-            "into consecutive scenes of roughly 5-40 seconds covering the whole film. Read "
-            "each timestamp as MM:SS from the video timeline and convert it to seconds; no "
-            f"value may exceed {self.video.duration}. For each scene give start and end, a "
-            "visual description, the spoken dialogue verbatim, the characters on screen and "
-            "the mood."
+            f"Today is {date.today().isoformat()}. You are a social media trend researcher. "
+            f"Using Google Search, find what is trending right now on {plan.platform} in "
+            f"{plan.market} for content like this: {plan.scene_query} (tone: {plan.tone}). "
+            "Cover popular anime, game and pop-culture topics this season, viral formats, "
+            "hooks or memes, and hashtags people actually use. Answer in English with at most "
+            "8 short bullet points; no preamble."
         )
-        index = self.gemini.structured(
-            self.settings.video_model,
-            [video_part(self.media.gcs_uri(self.video.path)), prompt],
-            SceneIndex,
-        )
-        index = normalize_index(index, self.video.duration)
-        self.store.save_index(self.video.id, _dump(index))
-        return index
+        return self.gemini.grounded(self.settings.reasoning_model, prompt)
 
     def search(self, plan: Plan, index: SceneIndex) -> Selection:
         prompt = (
             "Pick the single best continuous moment for this promo brief from the scene "
-            "index of the film. It may span adjacent scenes. The clip will be subtitled in "
+            "index of the video. It may span adjacent scenes. The clip will be subtitled in "
             "the target language, so it must include at least one scene whose dialogue is "
             "not empty, and the spoken lines should land early in the clip. Start the clip "
             "at the start time of a scene in the index. Prefer moments that are striking "
-            "without context.\n"
+            "without context and that fit current trends.\n"
             f"Brief: {plan.model_dump_json(by_alias=True)}\n"
-            f"Film length: {self.video.duration} seconds. The clip must be at most "
+            f"Current trends in the market: {self.trends or 'unknown'}\n"
+            f"Video length: {self.video.duration} seconds. The clip must be at most "
             f"{plan.max_seconds} seconds.\n"
             f"Scene index: {index.model_dump_json(by_alias=True)}"
         )
         sel = self.gemini.structured(self.settings.reasoning_model, [prompt], Selection)
         return clamp_selection(sel, self.video.duration, plan.max_seconds)
+
+    def search_library(self, plan: Plan, indexes: dict[str, SceneIndex]) -> Selection:
+        catalog = [
+            {
+                "videoId": v.id,
+                "title": v.title,
+                "duration": v.duration,
+                "index": _dump(indexes[v.id]),
+            }
+            for v in self.candidates
+        ]
+        prompt = (
+            "Pick the single best video and continuous moment for this promo brief from the "
+            "scene indexes below. The clip will be subtitled, so it must include spoken "
+            "dialogue early on. Start at the start time of a scene. Prefer moments that are "
+            "striking without context and that fit current trends.\n"
+            f"Brief: {plan.model_dump_json(by_alias=True)}\n"
+            f"Current trends in the market: {self.trends or 'unknown'}\n"
+            f"The clip must be at most {plan.max_seconds} seconds.\n"
+            f"Library: {json.dumps(catalog, ensure_ascii=False)}"
+        )
+        sel = self.gemini.structured(self.settings.reasoning_model, [prompt], LibrarySelection)
+        self.video = next((v for v in self.candidates if v.id == sel.video_id), self.video)
+        plain = Selection(start=sel.start, end=sel.end, reason=sel.reason)
+        return clamp_selection(plain, self.video.duration, plan.max_seconds)
+
+    def follow_leader(self, timeout_s: int = 900) -> Selection | None:
+        """Wait for the batch leader to cut its clip, then reuse the same range."""
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            leader = self.store.get_job(self.uid, self.leader_id) or {}
+            clip = leader.get("clipRange")
+            if clip:
+                self.video = next(
+                    (v for v in self.candidates if v.id == clip["videoId"]), self.video
+                )
+                return Selection(
+                    start=clip["start"], end=clip["end"], reason=clip.get("reason", "")
+                )
+            if leader.get("status") == "failed":
+                return None
+            time.sleep(3)
+        return None
 
     def subtitles(self, plan: Plan, clip_uri: str) -> list[SubtitleLine]:
         prompt = (
@@ -206,10 +290,13 @@ class Pipeline:
             "platform and age-rating rules), symbols, colors and numbers, and translation "
             "nuance or slang. Report concrete issues with the time in the clip, severity and "
             "a fix. For subtitle problems, add a revision with the line index and corrected "
-            "text. Only report real risks; an empty issue list is fine.\n"
+            "text. Only report real, specific risks; an empty issue list is fine. The output "
+            "is a draft for a human reviewer.\n"
             f"Then write a post caption and 3-8 hashtags in {plan.language_name} in a "
-            f"{plan.tone} tone, a short thumbnail title in {plan.language_name}, and the "
-            "best thumbnail moment (seconds into the clip).\n"
+            f"{plan.tone} tone that ride the current trends below where they genuinely fit, a "
+            f"short thumbnail title in {plan.language_name}, and the best thumbnail moment "
+            "(seconds into the clip).\n"
+            f"Current trends: {self.trends or 'unknown'}\n"
             f"Subtitles: {json.dumps(numbered, ensure_ascii=False)}"
         )
         return self.gemini.structured(
@@ -219,7 +306,7 @@ class Pipeline:
     def thumbnail(self, plan: Plan, report: CultureReport, frame: bytes) -> bytes:
         prompt = (
             f"Design a vertical 9:16 {plan.platform} cover image for viewers in {plan.market}, "
-            f"using this frame from the film '{self.video.title}' as the key visual. Keep the "
+            f"using this frame from '{self.video.title}' as the key visual. Keep the "
             "characters and scene recognizable. Add the headline "
             f'"{report.thumbnail_title}" in {plan.language_name}, large, bold and legible, '
             "spelled exactly as given. No logos, watermarks or extra text."
@@ -244,6 +331,9 @@ class Pipeline:
                 }
             )
 
+    def _video_fields(self) -> dict[str, str]:
+        return {"videoId": self.video.id, "videoTitle": self.video.title}
+
     def _run(self) -> None:
         self._step("plan", "running")
         plan = self.plan()
@@ -251,20 +341,53 @@ class Pipeline:
             "plan", "done", f"{plan.platform} · {plan.market} · {plan.language}", plan=_dump(plan)
         )
 
-        self._step("search", "running", "Reading the scene index")
-        index = self.scene_index()
-        selection = self.search(plan, index)
-        self._step(
-            "search",
-            "done",
-            f"{selection.start:.1f}s – {selection.end:.1f}s of {len(index.scenes)} scenes",
-            selection=_dump(selection),
-        )
+        self._step("trends", "running", f"Searching what is trending in {plan.market}")
+        try:
+            self.trends, sources = self.research_trends(plan)
+            self._step(
+                "trends",
+                "done",
+                f"{len(sources)} sources",
+                trends={"summary": self.trends, "sources": sources},
+            )
+        except Exception as exc:
+            log.exception("trend research failed")
+            self._step("trends", "skipped", f"Unavailable: {str(exc)[:120]}")
+
+        fixed = False
+        selection: Selection | None = None
+        if self.leader_id:
+            self._step("search", "running", "Using the same scene as the other markets")
+            selection = self.follow_leader()
+            fixed = selection is not None
+        if selection is None:
+            self._step("search", "running", "Reading the scene index")
+            if len(self.candidates) > 1:
+                indexes = {
+                    v.id: build_index(self.gemini, self.media, self.store, self.settings, v)
+                    for v in self.candidates
+                }
+                selection = self.search_library(plan, indexes)
+                scenes = sum(len(i.scenes) for i in indexes.values())
+                detail = (
+                    f"{self.video.title}: {selection.start:.1f}s – {selection.end:.1f}s "
+                    f"of {scenes} scenes"
+                )
+            else:
+                index = build_index(self.gemini, self.media, self.store, self.settings, self.video)
+                selection = self.search(plan, index)
+                detail = (
+                    f"{selection.start:.1f}s – {selection.end:.1f}s of {len(index.scenes)} scenes"
+                )
+        else:
+            detail = f"Shared scene {selection.start:.1f}s – {selection.end:.1f}s"
+        self._step("search", "done", detail, selection=_dump(selection), **self._video_fields())
 
         self._step("subtitles", "running", "Listening around the scene")
         duration = float(self.video.duration)
-        w_start = max(0.0, selection.start - WINDOW_PAD)
-        w_end = min(duration, selection.end + WINDOW_PAD)
+        pad = 0.0 if fixed else WINDOW_PAD
+        w_start = max(0.0, selection.start - pad)
+        w_end = min(duration, selection.end + pad)
         window = self.media.cut(self.video.path, w_start, w_end, "window.mp4", False)
         window_uri = self.media.gcs_uri(
             self.media.upload_file(window, self._out("window.mp4"), "video/mp4")
@@ -272,7 +395,8 @@ class Pipeline:
         lines: list[SubtitleLine] = []
         try:
             heard = shift(self.subtitles(plan, window_uri), w_start)
-            selection = align_selection(selection, heard, duration)
+            if not fixed:
+                selection = align_selection(selection, heard, duration)
             lines = lines_in(heard, selection)
             self._step(
                 "subtitles",
@@ -297,6 +421,12 @@ class Pipeline:
             "done",
             f"{selection.start:.1f}s – {selection.end:.1f}s, 9:16",
             outputs=self.outputs,
+            clipRange={
+                "videoId": self.video.id,
+                "start": selection.start,
+                "end": selection.end,
+                "reason": selection.reason,
+            },
         )
         clip_uri = self.media.gcs_uri(raw_path)
 

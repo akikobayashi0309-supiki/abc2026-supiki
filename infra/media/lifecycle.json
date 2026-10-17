@@ -1,0 +1,6 @@
+{
+  "rule": [
+    {"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["uploads/"]}},
+    {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["outputs/"]}}
+  ]
+}

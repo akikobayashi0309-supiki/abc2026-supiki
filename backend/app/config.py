@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     image_fallback_model: str = "gemini-3.1-flash-image"
     media_bucket: str = ""
     history_limit: int = 20
+    # Abuse and cost limits for the public demo.
+    max_active_jobs: int = 4
+    max_markets: int = 4
+    max_uploads: int = 5
+    max_upload_mb: int = 500
+    max_upload_seconds: int = 900
     # A running job older than this is treated as dead (e.g. instance recycled).
     stale_job_seconds: int = 900
 

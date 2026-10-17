@@ -25,6 +25,8 @@ def _new_client() -> genai.Client:
         vertexai=True,
         project=settings.google_cloud_project or None,
         location=settings.google_cloud_location,
+        # Retries and fallbacks are handled here, not inside the SDK.
+        http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
     )
 
 
@@ -84,6 +86,35 @@ class Gemini:
         if isinstance(response.parsed, schema):
             return response.parsed
         return schema.model_validate_json(response.text or "{}")
+
+    def grounded(self, model: str, prompt: str, timeout_s: int = 45) -> tuple[str, list[dict]]:
+        """Answer with Google Search grounding; returns text and web sources.
+
+        Search-grounded calls can be slow on the newest model, so it gets one short
+        attempt before the stable model takes over.
+        """
+        config = types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            http_options=types.HttpOptions(timeout=timeout_s * 1000),
+        )
+        models = self._chain(model, get_settings().fallback_model)
+        for i, name in enumerate(models):
+            try:
+                response = self.client.models.generate_content(
+                    model=name, contents=prompt, config=config
+                )
+                self.last_model = name
+                break
+            except Exception as exc:
+                if i == len(models) - 1:
+                    raise
+                log.warning("grounded call on %s failed (%s); falling back", name, exc)
+        sources = []
+        meta = response.candidates[0].grounding_metadata if response.candidates else None
+        for chunk in (meta.grounding_chunks or []) if meta else []:
+            if chunk.web and chunk.web.uri:
+                sources.append({"title": chunk.web.title or chunk.web.uri, "uri": chunk.web.uri})
+        return response.text or "", sources[:8]
 
     def image(self, model: str, prompt: str, reference_jpeg: bytes, aspect_ratio: str) -> bytes:
         """Generate an image from a reference frame and return PNG/JPEG bytes."""

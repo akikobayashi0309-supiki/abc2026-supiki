@@ -28,6 +28,12 @@ else
     --location="$REGION" --uniform-bucket-level-access --public-access-prevention
 fi
 
+# Browser uploads go straight to the bucket; uploads expire after 7 days, outputs after 30.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+sed "s/abc2026-supiki/${PROJECT_ID}/g" "$SCRIPT_DIR/media/cors.json" > /tmp/cors.json
+gcloud storage buckets update "gs://${BUCKET}" --project="$PROJECT_ID" \
+  --cors-file=/tmp/cors.json --lifecycle-file="$SCRIPT_DIR/media/lifecycle.json"
+
 echo "==> 2/4 Grant access"
 # Backend reads sources and writes outputs
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \

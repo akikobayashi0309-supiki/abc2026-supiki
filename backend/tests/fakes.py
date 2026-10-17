@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from app.schemas import (
     CultureReport,
     Issue,
+    LibrarySelection,
     Plan,
     Revision,
     Scene,
@@ -35,6 +36,7 @@ RESPONSES = {
         ]
     ),
     Selection: Selection(start=60, end=200, reason="Action"),
+    LibrarySelection: LibrarySelection(video_id="sintel", start=60, end=80, reason="Dragon"),
     Subtitles: Subtitles(
         lines=[SubtitleLine(start=0.5, end=2, original="Run!", translated="Corre!")]
     ),
@@ -56,8 +58,13 @@ RESPONSES = {
 
 
 class FakeGemini:
+    last_model = "fake-model"
+
     def structured(self, model, contents, schema):
         return RESPONSES[schema]
+
+    def grounded(self, model, prompt, timeout_s=45):
+        return "- Trend A\n- Trend B", [{"title": "example.com", "uri": "https://example.com"}]
 
     def image(self, model, prompt, reference_jpeg, aspect_ratio):
         return b"png"
@@ -85,11 +92,24 @@ class FakeMedia:
     def upload_bytes(self, data, dest, content_type):
         return dest
 
+    def signed_upload_url(self, path, content_type, minutes=30):
+        return f"https://upload/{path}"
+
+    def size(self, path):
+        return 1000
+
+    def duration(self, path):
+        return 120.0
+
+    def normalize(self, src_path, name):
+        return f"/tmp/{name}"
+
 
 class FakeStore:
     def __init__(self):
         self.docs: dict[str, list[dict]] = {}
         self.index: dict[str, dict] = {}
+        self.videos: dict[str, list[dict]] = {}
 
     def _find(self, uid, job_id):
         return next((d for d in self.docs.get(uid, []) if d["id"] == job_id), None)
@@ -118,8 +138,26 @@ class FakeStore:
     def list_jobs(self, uid, limit):
         return list(reversed(self.docs.get(uid, [])))[:limit]
 
-    def has_active_job(self, uid, stale_after):
-        return any(d["status"] in ("queued", "running") for d in self.docs.get(uid, []))
+    def count_active_jobs(self, uid, stale_after):
+        return sum(d["status"] in ("queued", "running") for d in self.docs.get(uid, []))
+
+    def list_batch(self, uid, batch_id):
+        jobs = [d for d in self.docs.get(uid, []) if d.get("batchId") == batch_id]
+        return sorted(jobs, key=lambda d: d.get("batchIndex", 0))
+
+    def create_video(self, uid, data):
+        vid = f"vid{len(self.videos.get(uid, []))}"
+        self.videos.setdefault(uid, []).append({"id": vid, **data, "owner": uid})
+        return vid
+
+    def update_video(self, uid, video_id, data):
+        self.get_video(uid, video_id).update(data)
+
+    def get_video(self, uid, video_id):
+        return next((v for v in self.videos.get(uid, []) if v["id"] == video_id), None)
+
+    def list_videos(self, uid):
+        return list(self.videos.get(uid, []))
 
     def get_index(self, video_id):
         return self.index.get(video_id)

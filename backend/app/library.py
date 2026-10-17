@@ -9,6 +9,7 @@ class Video:
     duration: int  # Seconds
     synopsis: str
     credit: str
+    owner: str = ""  # uid for uploaded videos; empty for the shared library
 
 
 # Creative Commons films (attribution required; see README credits).
@@ -53,3 +54,15 @@ LIBRARY: dict[str, Video] = {
         ),
     ]
 }
+
+
+def uploaded_video(doc: dict) -> Video:
+    return Video(
+        id=doc["id"],
+        title=doc.get("title") or "Uploaded video",
+        path=doc["path"],
+        duration=int(doc.get("duration") or 0),
+        synopsis=doc.get("synopsis") or "",
+        credit="Uploaded by you",
+        owner=doc.get("owner", ""),
+    )

@@ -75,6 +75,26 @@ def frame_args(src: str, at: float, out: str) -> list[str]:
     return ["ffmpeg", "-v", "error", "-y", "-ss", f"{at:.2f}", "-i", src, "-frames:v", "1", out]
 
 
+def normalize_args(src: str, out: str) -> list[str]:
+    # 720p H.264/AAC with faststart so ffmpeg can seek over HTTP and Gemini reads it as MP4.
+    return [
+        "ffmpeg", "-v", "error", "-y", "-i", src, "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", "scale=-2:'min(720,ih)'", *ENCODE, "-c:a", "aac", "-b:a", "128k", "-ac", "2", out,
+    ]  # fmt: skip
+
+
+def probe_duration(src: str) -> float:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError("Could not read the video. Is it a valid MP4, MOV or WebM file?")
+    return float(result.stdout.strip())
+
+
 def _timestamp(seconds: float) -> str:
     ms = max(int(round(seconds * 1000)), 0)
     h, ms = divmod(ms, 3_600_000)
@@ -124,6 +144,31 @@ class Media:
             service_account_email=getattr(credentials, "service_account_email", None),
             access_token=credentials.token,
         )
+
+    def signed_upload_url(self, path: str, content_type: str, minutes: int = 30) -> str:
+        credentials, _ = google.auth.default()
+        if not credentials.valid:
+            credentials.refresh(Request())
+        return self.bucket.blob(path).generate_signed_url(
+            version="v4",
+            method="PUT",
+            content_type=content_type,
+            expiration=dt.timedelta(minutes=minutes),
+            service_account_email=getattr(credentials, "service_account_email", None),
+            access_token=credentials.token,
+        )
+
+    def size(self, path: str) -> int | None:
+        blob = self.bucket.get_blob(path)
+        return blob.size if blob else None
+
+    def duration(self, path: str) -> float:
+        return probe_duration(self.signed_url(path))
+
+    def normalize(self, src_path: str, name: str) -> str:
+        out = self.local(name)
+        _run(normalize_args(self.signed_url(src_path), out))
+        return out
 
     def local(self, name: str) -> str:
         return str(self.workdir / name)

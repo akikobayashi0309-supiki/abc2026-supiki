@@ -31,10 +31,18 @@ class Scene(Schema):
 
 
 class SceneIndex(Schema):
+    summary: str = Field(default="", description="One-paragraph synopsis of the whole video")
     scenes: list[Scene]
 
 
 class Selection(Schema):
+    start: float = Field(description="Clip start in seconds")
+    end: float = Field(description="Clip end in seconds")
+    reason: str = Field(description="Why this moment works for the request")
+
+
+class LibrarySelection(Schema):
+    video_id: str = Field(description="ID of the chosen video")
     start: float = Field(description="Clip start in seconds")
     end: float = Field(description="Clip end in seconds")
     reason: str = Field(description="Why this moment works for the request")

@@ -17,6 +17,10 @@ def _jobs(uid: str) -> firestore.CollectionReference:
     return _db().collection("users").document(uid).collection("jobs")
 
 
+def _videos(uid: str) -> firestore.CollectionReference:
+    return _db().collection("users").document(uid).collection("videos")
+
+
 def now() -> datetime:
     return datetime.now(UTC)
 
