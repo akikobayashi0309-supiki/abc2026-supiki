@@ -1,7 +1,7 @@
 # ClipVoyage — Global Promo Clip Agent
 
-> **One request in, a localized and culture-checked short out.**
-> "Make a 20-second TikTok of the robot attack for gamers in Brazil" → ClipVoyage finds the scene, cuts a vertical clip, subtitles it in Brazilian Portuguese, reviews it for cultural risks in Brazil, and drafts the post and cover image.
+> **One request in, a localized, trend-aware and culture-checked short out.**
+> "A TikTok of the potion contest climax for anime fans in Japan" → ClipVoyage researches what is trending in Japan right now, finds the scene, cuts a vertical clip, subtitles it in Japanese, reviews it for cultural risks, and drafts the post and cover image. Pick several markets and it compares them side by side on the same scene.
 
 **Live demo:** https://abc2026-supiki.web.app (guest mode — no sign-up required)
 
@@ -14,19 +14,22 @@ Game and anime publishers reuse memorable scenes from their titles for trailers 
 3. Check the clip for cultural and regulatory risks: gestures, religion, violence and weapons, symbols, colors and numbers, slang
 4. Write a local caption and hashtags, and make a cover image
 
-ClipVoyage automates the steps that come **after** search, so a marketer can go from an idea to a localized, reviewed draft in about a minute.
+ClipVoyage automates the steps that come **after** search, so a marketer can go from an idea to a localized, reviewed draft in a few minutes, for any footage they upload.
 
 ## How it works
 
 ```
-Request ─▶ 1 Plan ─▶ 2 Search ─▶ 3 Cut ─▶ 4 Subtitles ─▶ 5 Cultural check ─▶ 6 Render ─▶ 7 Assets
-           Gemini     Gemini      ffmpeg    Gemini           Gemini               ffmpeg      ffmpeg + Gemini image
+Request ─▶ Plan ─▶ Trends ─▶ Search ─▶ Subtitles ─▶ Cut ─▶ Cultural check ─▶ Render ─▶ Assets
+           Gemini   Gemini +   Gemini    Gemini       ffmpeg   Gemini            ffmpeg     ffmpeg +
+                    Google                                                                  Gemini image
+                    Search
 ```
 
 | Step | What happens | Model |
 |---|---|---|
 | Plan | Turns the free-text request into a brief: market, language, platform, length, tone | `gemini-4-argon` |
-| Search | Picks the best moment from a scene index of the film (start, end, dialogue, characters, mood). The index is built once per film from the video itself, then cached in Firestore | `gemini-4-argon` (video + text) |
+| Trends | Researches what is trending right now on the platform in the target market (seasonal topics, formats, hooks, hashtags) with Google Search grounding, and shows the sources | `gemini-4-argon` + Google Search |
+| Search | Picks the best moment from a scene index (start, end, dialogue, characters, mood), favoring what fits current trends. The index is built once per video from the video itself and cached in Firestore. With **Agent picks**, it searches every video in the library | `gemini-4-argon` (video + text) |
 | Cut | Cuts the moment and converts it to 9:16 over a blurred background | ffmpeg on Cloud Run |
 | Subtitles | Transcribes each spoken line around the scene with timings, snaps the clip onto real dialogue, and translates it for the market | `gemini-4-argon` (video input) |
 | Cultural check | Watches the clip with its subtitles and reports market-specific risks with time, severity and a fix. It rewrites subtitle lines that need it, writes the caption and hashtags, and picks the thumbnail frame | `gemini-4-argon` (video input) |
@@ -35,15 +38,21 @@ Request ─▶ 1 Plan ─▶ 2 Search ─▶ 3 Cut ─▶ 4 Subtitles ─▶ 5 C
 
 Every step uses the latest Gemini model and falls back automatically to a stable model (`gemini-3.8-flash`, `gemini-3.1-flash-image`) on quota or availability errors; the UI shows which model served each step. Every step reports its progress, so the UI shows the agent working in real time. If an optional step fails (for example, thumbnail generation), the job still delivers the clip.
 
+### More ways to use it
+
+- **Upload your own footage**: MP4, MOV or WebM up to 15 minutes. The browser uploads straight to Cloud Storage with a signed URL; the backend validates, normalizes and indexes it. Uploads are deleted after 7 days.
+- **Agent picks**: describe a topic ("a heartwarming friendship moment") and the agent chooses the video and the scene.
+- **Compare markets**: choose 2-4 markets. All markets review the same scene, each with its own trends, subtitles, cultural review and post, shown side by side.
+
 ## How we use Google Cloud
 
 | Service | Usage |
 |---|---|
-| **Gemini (Vertex AI)** | The core of the agent. It plans the brief, understands video to build the scene index and transcribe dialogue, selects the scene, translates, reviews cultural risk from the video and subtitles together, and generates the cover image. All calls use structured JSON output (Pydantic schemas) through the `google-genai` SDK on the global endpoint, with no API keys. |
+| **Gemini (Vertex AI)** | The core of the agent. It plans the brief, researches trends with Google Search grounding, understands video to build the scene index and transcribe dialogue, selects the scene, translates, reviews cultural risk from the video and subtitles together, and generates the cover image. Calls use structured JSON output (Pydantic schemas) through the `google-genai` SDK on the global endpoint, with no API keys. Every step runs on the latest model (`gemini-4-argon`, `gemini-nano-banana-2.1`) with automatic fallback to stable models. |
 | **Cloud Run** | Hosts the FastAPI backend and the ffmpeg media pipeline. Jobs run in the background (CPU always allocated), and the service runs as a least-privilege service account. |
-| **Firestore** | Stores job state and per-step progress (`users/{uid}/jobs`), which the UI polls, and caches each film's scene index (`library/{videoId}`) so search is fast after the first run. |
+| **Firestore** | Stores job state and per-step progress (`users/{uid}/jobs`), which the UI polls, uploaded videos (`users/{uid}/videos`), and each video's cached scene index (`library/{videoId}`) so search is fast after the first run. |
 | **Firebase** | Hosting serves the React app and routes `/api/**` to Cloud Run on the same origin. Authentication provides Google sign-in and anonymous guest mode, so judges can try the app instantly. |
-| **Cloud Storage** | Source films and generated outputs, delivered to the browser through short-lived signed URLs. |
+| **Cloud Storage** | Source films, user uploads (direct browser upload via signed URLs) and generated outputs, delivered through short-lived signed URLs, with lifecycle rules that delete uploads after 7 days. |
 
 CI/CD: GitHub Actions deploys Cloud Run and Firebase Hosting on every push to `main`, using Workload Identity Federation (no service account keys).
 
@@ -94,7 +103,10 @@ cd frontend && npm ci && npm run dev   # proxies /api to localhost:8080
 |---|---|---|
 | GET | `/api/healthz` | Health check (no auth) |
 | GET | `/api/library` | Available source films |
-| POST | `/api/jobs` | `{ "videoId", "request" }` → starts the agent (one active job per user) |
+| POST | `/api/uploads` | `{ "title", "contentType", "size" }` → signed upload URL |
+| POST | `/api/uploads/{id}/complete` | Validates, normalizes and indexes the uploaded video |
+| POST | `/api/jobs` | `{ "videoId" \| "auto", "request", "markets"? }` → starts the agent; 2-4 markets start a comparison batch |
+| GET | `/api/batches/{id}` | All jobs of a market comparison |
 | GET | `/api/jobs` | The caller's recent jobs |
 | GET | `/api/jobs/{id}` | Job progress and results, with signed URLs for outputs |
 
