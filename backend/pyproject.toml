@@ -5,6 +5,7 @@ description = "Cloud Run API: Gemini (Vertex AI) + Firestore"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    "google-cloud-storage>=2.18",
     "uvicorn[standard]>=0.30",
     "google-genai>=1.0",
     "google-cloud-firestore>=2.19",

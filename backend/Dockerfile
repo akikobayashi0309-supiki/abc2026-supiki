@@ -1,5 +1,10 @@
 FROM python:3.12-slim
 
+# ffmpeg (with libass) for cutting and subtitle burn-in; Noto fonts cover Latin, CJK, Arabic, Thai, etc.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-noto-core fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /usr/local/bin/uv
 
 WORKDIR /app

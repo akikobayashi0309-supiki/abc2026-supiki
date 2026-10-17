@@ -39,14 +39,21 @@ jobs:
       - name: Deploy to Cloud Run
         # Public ingress is required for the Firebase Hosting rewrite;
         # every non-health endpoint verifies a Firebase ID token.
+        # Jobs run after the response returns, so CPU must stay allocated.
         run: |
           gcloud run deploy "$SERVICE" \
             --image="$IMAGE" \
             --region="$REGION" \
             --service-account="app-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
             --allow-unauthenticated \
-            --max-instances=5 \
-            --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global"
+            --cpu=2 \
+            --memory=4Gi \
+            --no-cpu-throttling \
+            --timeout=900 \
+            --concurrency=4 \
+            --min-instances=1 \
+            --max-instances=3 \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,MEDIA_BUCKET=${PROJECT_ID}-media"
 
   frontend:
     # Runs after the backend so the /api rewrite target always exists.
