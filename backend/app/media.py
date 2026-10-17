@@ -26,9 +26,33 @@ VERTICAL_FILTER = (
 
 # libass styles use a 288px-high reference canvas; this lands in the lower blurred band.
 SUBTITLE_STYLE = (
-    "FontName=Noto Sans,FontSize=13,Bold=1,PrimaryColour=&H00FFFFFF,"
+    "FontName={font},FontSize=15,Bold=1,PrimaryColour=&H00FFFFFF,"
     "OutlineColour=&H00000000,BorderStyle=1,Outline=1.5,Shadow=0,Alignment=2,MarginV=60"
 )
+
+# libass does not reliably fall back across scripts, so pick a Noto family per language.
+FONTS = {
+    "ar": "Noto Sans Arabic",
+    "fa": "Noto Sans Arabic",
+    "ur": "Noto Sans Arabic",
+    "he": "Noto Sans Hebrew",
+    "th": "Noto Sans Thai",
+    "hi": "Noto Sans Devanagari",
+    "mr": "Noto Sans Devanagari",
+    "bn": "Noto Sans Bengali",
+    "ta": "Noto Sans Tamil",
+    "ja": "Noto Sans CJK JP",
+    "ko": "Noto Sans CJK KR",
+    "zh": "Noto Sans CJK SC",
+    "zh-tw": "Noto Sans CJK TC",
+    "zh-hk": "Noto Sans CJK TC",
+}
+
+
+def font_for(language: str) -> str:
+    tag = language.lower().replace("_", "-")
+    return FONTS.get(tag) or FONTS.get(tag.split("-")[0]) or "Noto Sans"
+
 
 ENCODE = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart"]
 
@@ -42,8 +66,8 @@ def cut_args(src: str, start: float, end: float, out: str, vertical: bool) -> li
     return args
 
 
-def burn_args(src: str, srt: str, out: str) -> list[str]:
-    vf = f"subtitles={srt}:force_style='{SUBTITLE_STYLE}'"
+def burn_args(src: str, srt: str, out: str, font: str = "Noto Sans") -> list[str]:
+    vf = f"subtitles={srt}:force_style='{SUBTITLE_STYLE.format(font=font)}'"
     return ["ffmpeg", "-v", "error", "-y", "-i", src, "-vf", vf, *ENCODE, "-c:a", "copy", out]
 
 
@@ -109,11 +133,11 @@ class Media:
         _run(cut_args(self.signed_url(src_path), start, end, out, vertical))
         return out
 
-    def burn(self, clip: str, lines: list[SubtitleLine], name: str) -> str:
+    def burn(self, clip: str, lines: list[SubtitleLine], name: str, language: str) -> str:
         srt = self.local("subs.srt")
         Path(srt).write_text(to_srt(lines), encoding="utf-8")
         out = self.local(name)
-        _run(burn_args(clip, srt, out))
+        _run(burn_args(clip, srt, out, font_for(language)))
         return out
 
     def frame(self, src: str, at: float, name: str) -> bytes:

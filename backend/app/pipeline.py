@@ -315,7 +315,7 @@ class Pipeline:
         final_lines = apply_revisions(lines, report)
         if final_lines:
             try:
-                final = self.media.burn(vertical, final_lines, "final.mp4")
+                final = self.media.burn(vertical, final_lines, "final.mp4", plan.language)
                 self.outputs["final"] = self.media.upload_file(
                     final, self._out("final.mp4"), "video/mp4"
                 )

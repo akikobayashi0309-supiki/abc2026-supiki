@@ -97,3 +97,13 @@ def test_lines_in_returns_clip_relative_lines():
         ("a", 0, 1),
         ("b", 10, 20),
     ]
+
+
+def test_font_for_language():
+    from app.media import font_for
+
+    assert font_for("ar-AE") == "Noto Sans Arabic"
+    assert font_for("zh-TW") == "Noto Sans CJK TC"
+    assert font_for("zh-CN") == "Noto Sans CJK SC"
+    assert font_for("pt-BR") == "Noto Sans"
+    assert "FontName=Noto Sans Thai" in " ".join(burn_args("a", "b", "c", font_for("th")))

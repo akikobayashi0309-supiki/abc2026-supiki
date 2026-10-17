@@ -73,7 +73,7 @@ class FakeMedia:
     def cut(self, src_path, start, end, name, vertical):
         return f"/tmp/{name}"
 
-    def burn(self, clip, lines, name):
+    def burn(self, clip, lines, name, language):
         return f"/tmp/{name}"
 
     def frame(self, src, at, name):
