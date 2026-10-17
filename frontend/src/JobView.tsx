@@ -3,6 +3,7 @@ import type { Job, StepStatus } from './api'
 
 const STEP_LABELS: Record<string, string> = {
   plan: 'Understand the request',
+  trends: 'Research trends',
   search: 'Find the scene',
   subtitles: 'Transcribe & translate',
   cut: 'Cut a vertical clip',
@@ -115,6 +116,22 @@ export function JobView({ job }: { job: Job }) {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {job.trends && (
+            <div className="card">
+              <h3>Trends in {job.plan?.market ?? 'the market'}</h3>
+              <p className="trends">{job.trends.summary}</p>
+              {job.trends.sources.length > 0 && (
+                <p className="sources">
+                  {job.trends.sources.map((s, i) => (
+                    <a key={i} href={s.uri} target="_blank" rel="noreferrer">
+                      {s.title}
+                    </a>
+                  ))}
+                </p>
               )}
             </div>
           )}

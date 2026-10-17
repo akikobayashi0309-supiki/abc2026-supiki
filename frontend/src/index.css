@@ -573,3 +573,149 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.video:disabled {
+  opacity: 0.5;
+}
+
+.video.auto,
+.video.upload {
+  display: flex;
+  flex-direction: column;
+}
+
+.auto-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  font-size: 1.6rem;
+  color: #0d0f14;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.video.upload .auto-art {
+  color: var(--muted);
+  background: transparent;
+  border-bottom: 1px dashed var(--border);
+}
+
+.chip.on {
+  color: #0d0f14;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.history-text em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.trends {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.8rem;
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.market {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.market header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.market h3 {
+  margin: 0;
+}
+
+.market video,
+.market .placeholder {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: 12px;
+}
+
+.market .placeholder {
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  justify-items: center;
+  color: var(--muted);
+}
+
+.bar {
+  width: 140px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.4s;
+}
+
+.market .verdict {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  font-size: 0.85rem;
+}
+
+.market .verdict strong {
+  display: block;
+}
+
+.market .verdict ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+  display: grid;
+  gap: 4px;
+}
+
+.market .verdict li .badge {
+  margin-right: 4px;
+}
+
+.market .verdict li.high .badge {
+  background: var(--bad);
+  color: #0d0f14;
+}
+
+.market .verdict li.medium .badge {
+  background: var(--warn);
+  color: #0d0f14;
+}
+
+.market .caption,
+.market .hashtags {
+  margin: 4px 0 0;
+}
