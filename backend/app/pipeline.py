@@ -13,8 +13,10 @@ from app.store import Store
 
 log = logging.getLogger(__name__)
 
-STEPS = ["plan", "search", "cut", "subtitles", "culture", "render", "assets"]
+STEPS = ["plan", "search", "subtitles", "cut", "culture", "render", "assets"]
 MIN_SECONDS = 5
+# Transcribe this much extra footage around the selection to snap to real dialogue.
+WINDOW_PAD = 20.0
 
 
 class StepFailed(Exception):
@@ -42,6 +44,41 @@ def normalize_index(index: SceneIndex, duration: float) -> SceneIndex:
         end = min(max(round(scene.end * ratio, 2), start), duration)
         scenes.append(scene.model_copy(update={"start": start, "end": end}))
     return SceneIndex(scenes=scenes)
+
+
+def shift(lines: list[SubtitleLine], offset: float) -> list[SubtitleLine]:
+    return [
+        line.model_copy(update={"start": line.start + offset, "end": line.end + offset})
+        for line in lines
+    ]
+
+
+def align_selection(sel: Selection, lines: list[SubtitleLine], duration: float) -> Selection:
+    """Move the clip onto real dialogue when the scene index timing missed it.
+
+    `lines` use absolute film time.
+    """
+    if not lines or any(line.end > sel.start and line.start < sel.end for line in lines):
+        return sel
+    nearest = min(lines, key=lambda line: abs(line.start - sel.start))
+    length = sel.end - sel.start
+    start = max(0.0, min(nearest.start - 0.5, duration - length))
+    return Selection(start=round(start, 2), end=round(start + length, 2), reason=sel.reason)
+
+
+def lines_in(lines: list[SubtitleLine], sel: Selection) -> list[SubtitleLine]:
+    """Lines overlapping the selection, relative to the clip start."""
+    length = sel.end - sel.start
+    return [
+        line.model_copy(
+            update={
+                "start": round(max(line.start - sel.start, 0.0), 2),
+                "end": round(min(line.end - sel.start, length), 2),
+            }
+        )
+        for line in lines
+        if line.end > sel.start and line.start < sel.end
+    ]
 
 
 def hashtags(tags: list[str]) -> list[str]:
@@ -220,6 +257,30 @@ class Pipeline:
             selection=_dump(selection),
         )
 
+        self._step("subtitles", "running", "Listening around the scene")
+        duration = float(self.video.duration)
+        w_start = max(0.0, selection.start - WINDOW_PAD)
+        w_end = min(duration, selection.end + WINDOW_PAD)
+        window = self.media.cut(self.video.path, w_start, w_end, "window.mp4", False)
+        window_uri = self.media.gcs_uri(
+            self.media.upload_file(window, self._out("window.mp4"), "video/mp4")
+        )
+        lines: list[SubtitleLine] = []
+        try:
+            heard = shift(self.subtitles(plan, window_uri), w_start)
+            selection = align_selection(selection, heard, duration)
+            lines = lines_in(heard, selection)
+            self._step(
+                "subtitles",
+                "done",
+                f"{len(lines)} lines",
+                subtitles=[_dump(x) for x in lines],
+                selection=_dump(selection),
+            )
+        except Exception as exc:
+            log.exception("subtitles failed")
+            self._step("subtitles", "failed", str(exc)[:200])
+
         self._step("cut", "running")
         raw = self.media.cut(self.video.path, selection.start, selection.end, "raw.mp4", False)
         vertical = self.media.cut(
@@ -227,19 +288,13 @@ class Pipeline:
         )
         raw_path = self.media.upload_file(raw, self._out("raw.mp4"), "video/mp4")
         self.outputs["clip"] = self.media.upload_file(vertical, self._out("clip.mp4"), "video/mp4")
-        self._step("cut", "done", "9:16 with blurred background", outputs=self.outputs)
+        self._step(
+            "cut",
+            "done",
+            f"{selection.start:.1f}s – {selection.end:.1f}s, 9:16",
+            outputs=self.outputs,
+        )
         clip_uri = self.media.gcs_uri(raw_path)
-
-        lines: list[SubtitleLine] = []
-        self._step("subtitles", "running")
-        try:
-            lines = self.subtitles(plan, clip_uri)
-            self._step(
-                "subtitles", "done", f"{len(lines)} lines", subtitles=[_dump(x) for x in lines]
-            )
-        except Exception as exc:
-            log.exception("subtitles failed")
-            self._step("subtitles", "failed", str(exc)[:200])
 
         report: CultureReport | None = None
         self._step("culture", "running")

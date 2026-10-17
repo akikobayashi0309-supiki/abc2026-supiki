@@ -1,5 +1,4 @@
 import time
-from functools import lru_cache
 from typing import TypeVar
 
 from google import genai
@@ -13,8 +12,7 @@ T = TypeVar("T", bound=BaseModel)
 RETRYABLE = {429, 500, 503, 504}
 
 
-@lru_cache
-def _client() -> genai.Client:
+def _new_client() -> genai.Client:
     # Vertex AI mode with ADC: no API keys anywhere.
     settings = get_settings()
     return genai.Client(
@@ -43,10 +41,14 @@ def _with_retry(call):
 
 
 class Gemini:
+    def __init__(self) -> None:
+        # One client per job: a shared client was closed under concurrent jobs.
+        self.client = _new_client()
+
     def structured(self, model: str, contents: list, schema: type[T]) -> T:
         """Generate JSON constrained to `schema` and parse it."""
         response = _with_retry(
-            lambda: _client().models.generate_content(
+            lambda: self.client.models.generate_content(
                 model=model,
                 contents=contents,
                 config=types.GenerateContentConfig(
@@ -62,7 +64,7 @@ class Gemini:
     def image(self, model: str, prompt: str, reference_jpeg: bytes, aspect_ratio: str) -> bytes:
         """Generate an image from a reference frame and return PNG/JPEG bytes."""
         response = _with_retry(
-            lambda: _client().models.generate_content(
+            lambda: self.client.models.generate_content(
                 model=model,
                 contents=[
                     types.Part.from_bytes(data=reference_jpeg, mime_type="image/jpeg"),

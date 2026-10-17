@@ -69,3 +69,31 @@ def test_hashtags_are_normalized():
     from app.pipeline import hashtags
 
     assert hashtags(["anime", "#Gamer BR", " ", "#"]) == ["#anime", "#GamerBR"]
+
+
+def _line(start, end, text="x"):
+    return SubtitleLine(start=start, end=end, original=text, translated=text)
+
+
+def test_align_selection_snaps_to_nearest_dialogue():
+    from app.pipeline import align_selection
+
+    sel = Selection(start=100, end=120, reason="r")
+    # Overlapping dialogue: keep as is.
+    assert align_selection(sel, [_line(110, 112)], duration=300) is sel
+    # Dialogue only before the clip: move the clip onto it, keeping the length.
+    moved = align_selection(sel, [_line(85, 88), _line(30, 31)], duration=300)
+    assert (moved.start, moved.end) == (84.5, 104.5)
+    # No dialogue at all: keep as is.
+    assert align_selection(sel, [], duration=300) is sel
+
+
+def test_lines_in_returns_clip_relative_lines():
+    from app.pipeline import lines_in
+
+    sel = Selection(start=100, end=120, reason="r")
+    lines = [_line(95, 101, "a"), _line(110, 125, "b"), _line(130, 131, "c")]
+    assert [(x.original, x.start, x.end) for x in lines_in(lines, sel)] == [
+        ("a", 0, 1),
+        ("b", 10, 20),
+    ]

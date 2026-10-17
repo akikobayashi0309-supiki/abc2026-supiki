@@ -4,8 +4,8 @@ import type { Job, StepStatus } from './api'
 const STEP_LABELS: Record<string, string> = {
   plan: 'Understand the request',
   search: 'Find the scene',
-  cut: 'Cut a vertical clip',
   subtitles: 'Transcribe & translate',
+  cut: 'Cut a vertical clip',
   culture: 'Cultural check',
   render: 'Burn in subtitles',
   assets: 'Keyframe & thumbnail',
