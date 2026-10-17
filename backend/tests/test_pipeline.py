@@ -47,3 +47,24 @@ def test_schema_uses_camel_case():
     assert "start" in sel.model_dump(by_alias=True)
     report_fields = CultureReport.model_json_schema()["properties"]
     assert "thumbnailTitle" in report_fields
+
+
+def test_normalize_index_rescales_overshooting_timeline():
+    from app.pipeline import normalize_index
+    from app.schemas import Scene, SceneIndex
+
+    def scene(start, end):
+        return Scene(start=start, end=end, description="", dialogue="", characters=[], mood="")
+
+    stretched = SceneIndex(scenes=[scene(0, 600), scene(600, 1200)])
+    fixed = normalize_index(stretched, duration=600)
+    assert [(s.start, s.end) for s in fixed.scenes] == [(0, 300), (300, 600)]
+
+    ok = SceneIndex(scenes=[scene(0, 590)])
+    assert normalize_index(ok, duration=600) is ok
+
+
+def test_hashtags_are_normalized():
+    from app.pipeline import hashtags
+
+    assert hashtags(["anime", "#Gamer BR", " ", "#"]) == ["#anime", "#GamerBR"]

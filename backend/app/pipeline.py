@@ -32,6 +32,25 @@ def clamp_selection(sel: Selection, duration: float, max_seconds: int) -> Select
     return Selection(start=round(start, 2), end=round(end, 2), reason=sel.reason)
 
 
+def normalize_index(index: SceneIndex, duration: float) -> SceneIndex:
+    """Rescale timestamps if the model's timeline overshoots the real film length."""
+    last = max((scene.end for scene in index.scenes), default=0.0)
+    if last <= duration * 1.02:
+        return index
+    ratio = duration / last
+    scenes = [
+        scene.model_copy(
+            update={"start": round(scene.start * ratio, 2), "end": round(scene.end * ratio, 2)}
+        )
+        for scene in index.scenes
+    ]
+    return SceneIndex(scenes=scenes)
+
+
+def hashtags(tags: list[str]) -> list[str]:
+    return ["#" + tag.lstrip("#").replace(" ", "") for tag in tags if tag.strip("# ")]
+
+
 def apply_revisions(lines: list[SubtitleLine], report: CultureReport | None) -> list[SubtitleLine]:
     if not report:
         return lines
@@ -92,17 +111,22 @@ class Pipeline:
         cached = self.store.get_index(self.video.id)
         if cached:
             return SceneIndex.model_validate(cached)
+        minutes, seconds = divmod(self.video.duration, 60)
         prompt = (
-            "Index this film for scene search. Split it into consecutive scenes of roughly "
-            "5-40 seconds covering the whole film. For each scene give start and end in "
-            "seconds from the beginning, a visual description, the spoken dialogue "
-            "verbatim, the characters on screen and the mood."
+            "Index this film for scene search. It is exactly "
+            f"{minutes}:{seconds:02d} (MM:SS) long, i.e. {self.video.duration} seconds. Split it "
+            "into consecutive scenes of roughly 5-40 seconds covering the whole film. Read "
+            "each timestamp as MM:SS from the video timeline and convert it to seconds; no "
+            f"value may exceed {self.video.duration}. For each scene give start and end, a "
+            "visual description, the spoken dialogue verbatim, the characters on screen and "
+            "the mood."
         )
         index = self.gemini.structured(
             self.settings.video_model,
-            [video_part(self.media.gcs_uri(self.video.path), low_res=True), prompt],
+            [video_part(self.media.gcs_uri(self.video.path)), prompt],
             SceneIndex,
         )
+        index = normalize_index(index, self.video.duration)
         self.store.save_index(self.video.id, _dump(index))
         return index
 
@@ -221,6 +245,7 @@ class Pipeline:
         self._step("culture", "running")
         try:
             report = self.culture(plan, clip_uri, lines)
+            report.hashtags = hashtags(report.hashtags)
             self._step(
                 "culture",
                 "done",
