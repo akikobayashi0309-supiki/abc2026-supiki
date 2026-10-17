@@ -42,7 +42,7 @@ npm run build
 
 ## Conventions
 - Backend: routes live under `/api/*`; external services are wrapped in small classes exposed via FastAPI dependencies (`get_gemini`, `get_store`) so tests can override them. Never call Gemini or Firestore in tests.
-- Firestore: per-user data lives under `users/{uid}/<collection>`; collection names are lowerCamelCase plural (`generations`); fields: lowerCamelCase.
+- Firestore: per-user data lives under `users/{uid}/<collection>`; collection names are lowerCamelCase plural (`jobs`); fields: lowerCamelCase.
 - The Hosting -> Cloud Run rewrite times out after 60 s. Long-running work (e.g. video analysis) must be asynchronous: create a job document, process it, and let the client poll.
 - Config comes from environment variables (`backend/app/config.py`), not hard-coded values.
 

@@ -69,3 +69,15 @@ def test_one_active_job_per_user(client, store):
 def test_other_users_job_is_hidden(client, store):
     job_id = store.create_job("someone-else", {"status": "done"})
     assert client.get(f"/api/jobs/{job_id}").status_code == 404
+
+
+def test_failed_step_is_marked(client, store, monkeypatch):
+    def boom(self, plan, index):
+        raise RuntimeError("search exploded")
+
+    monkeypatch.setattr("app.pipeline.Pipeline.search", boom)
+    res = client.post("/api/jobs", json={"videoId": "sintel", "request": "anything"})
+    job = client.get(f"/api/jobs/{res.json()['id']}").json()
+    assert job["status"] == "failed"
+    assert job["steps"]["search"]["status"] == "failed"
+    assert "search exploded" in job["error"]

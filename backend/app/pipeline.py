@@ -61,6 +61,7 @@ class Pipeline:
         self.uid, self.job_id, self.video, self.request = uid, job_id, video, request
         self.gemini, self.media, self.store, self.settings = gemini, media, store, settings
         self.outputs: dict[str, str] = {}
+        self.current = ""
 
     # -- bookkeeping -------------------------------------------------------
 
@@ -68,6 +69,7 @@ class Pipeline:
         self.store.update_job(self.uid, self.job_id, data)
 
     def _step(self, name: str, status: str, detail: str = "", **data: Any) -> None:
+        self.current = name
         self._update({f"steps.{name}": {"status": status, "detail": detail}, **data})
 
     def _out(self, path: str) -> str:
@@ -168,7 +170,14 @@ class Pipeline:
             self._update({"status": "done", "outputs": self.outputs})
         except Exception as exc:
             log.exception("job %s failed", self.job_id)
-            self._update({"status": "failed", "error": str(exc)[:500], "outputs": self.outputs})
+            self._update(
+                {
+                    "status": "failed",
+                    "error": str(exc)[:500],
+                    "outputs": self.outputs,
+                    f"steps.{self.current}": {"status": "failed", "detail": "Stopped here"},
+                }
+            )
 
     def _run(self) -> None:
         self._step("plan", "running")
