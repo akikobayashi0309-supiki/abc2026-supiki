@@ -135,17 +135,17 @@ def test_failed_step_is_marked(client, store, monkeypatch):
 
 
 def test_auto_stops_when_named_title_has_no_footage(client, monkeypatch):
-    from app.schemas import LibrarySelection, Plan
+    from app.schemas import Plan, TitleMatch
     from tests import fakes
 
     plan = fakes.RESPONSES[Plan].model_copy(update={"requested_title": "The Apothecary Diaries"})
-    missing = LibrarySelection(title_found=False, video_id="sintel", start=0, end=10, reason="")
     monkeypatch.setitem(fakes.RESPONSES, Plan, plan)
-    monkeypatch.setitem(fakes.RESPONSES, LibrarySelection, missing)
+    monkeypatch.setitem(fakes.RESPONSES, TitleMatch, TitleMatch(found=False))
     res = client.post("/api/jobs", json={"videoId": "auto", "request": "薬屋のひとりごと"})
     job = client.get(f"/api/jobs/{res.json()['id']}").json()
     assert job["status"] == "failed"
     assert job["missingFootage"] is True
     assert "The Apothecary Diaries" in job["error"]
     assert job["steps"]["search"]["status"] == "failed"
+    assert job["steps"]["trends"]["status"] == "pending"  # Stopped before the slow steps
     assert "outputs" not in job or not job["outputs"]

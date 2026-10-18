@@ -18,6 +18,7 @@ from app.schemas import (
     Selection,
     SubtitleLine,
     Subtitles,
+    TitleMatch,
 )
 from app.store import Store
 
@@ -264,6 +265,24 @@ class Pipeline:
         plain = Selection(start=sel.start, end=sel.end, reason=sel.reason)
         return clamp_selection(plain, self.video.duration, plan.max_seconds)
 
+    def check_title(self, plan: Plan) -> None:
+        """Fail fast when the request names a title the library has no footage of."""
+        catalog = [
+            {"videoId": v.id, "title": v.title, "synopsis": v.synopsis} for v in self.candidates
+        ]
+        prompt = (
+            f'Is any of these videos footage of "{plan.requested_title}"? Match the actual '
+            "work (allowing translations and alternate titles), not a similar theme.\n"
+            f"Videos: {json.dumps(catalog, ensure_ascii=False)}"
+        )
+        match = self.gemini.structured(self.settings.reasoning_model, [prompt], TitleMatch)
+        if not match.found:
+            raise MissingFootage(
+                f'No footage of "{plan.requested_title}" in the library. Upload official '
+                "footage you have the rights to (e.g. a trailer or gameplay capture), then "
+                "pick it as the source or run Agent picks again."
+            )
+
     def follow_leader(self, timeout_s: int = 900) -> Selection | None:
         """Wait for the batch leader to cut its clip, then reuse the same range."""
         deadline = time.monotonic() + timeout_s
@@ -365,6 +384,10 @@ class Pipeline:
         self._step(
             "plan", "done", f"{plan.platform} · {plan.market} · {plan.language}", plan=_dump(plan)
         )
+
+        if len(self.candidates) > 1 and plan.requested_title and not self.leader_id:
+            self._step("search", "running", f"Looking for {plan.requested_title}")
+            self.check_title(plan)
 
         self._step("trends", "running", f"Searching what is trending in {plan.market}")
         try:

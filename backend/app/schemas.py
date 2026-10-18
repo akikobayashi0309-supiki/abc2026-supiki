@@ -46,6 +46,11 @@ class Selection(Schema):
     reason: str = Field(description="Why this moment works for the request")
 
 
+class TitleMatch(Schema):
+    found: bool = Field(description="True if one of the videos is footage of the requested title")
+    video_id: str = Field(default="", description="ID of that video, if found")
+
+
 class LibrarySelection(Schema):
     title_found: bool = Field(
         default=True,

@@ -11,6 +11,7 @@ from app.schemas import (
     Selection,
     SubtitleLine,
     Subtitles,
+    TitleMatch,
 )
 
 RESPONSES = {
@@ -37,6 +38,7 @@ RESPONSES = {
     ),
     Selection: Selection(start=60, end=200, reason="Action"),
     LibrarySelection: LibrarySelection(video_id="sintel", start=60, end=80, reason="Dragon"),
+    TitleMatch: TitleMatch(found=True, video_id="sintel"),
     Subtitles: Subtitles(
         lines=[SubtitleLine(start=0.5, end=2, original="Run!", translated="Corre!")]
     ),
