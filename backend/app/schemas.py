@@ -19,6 +19,11 @@ class Plan(Schema):
     platform: str = Field(description="Target platform, e.g. 'TikTok'")
     max_seconds: int = Field(description="Maximum clip length in seconds (10-60)")
     tone: str = Field(description="Desired tone of the post")
+    requested_title: str = Field(
+        default="",
+        description="Specific anime, game or film title the request names, as written; "
+        "empty if the request only describes a topic or mood",
+    )
 
 
 class Scene(Schema):
@@ -42,6 +47,11 @@ class Selection(Schema):
 
 
 class LibrarySelection(Schema):
+    title_found: bool = Field(
+        default=True,
+        description="False if the brief names a specific title and no video in the "
+        "library is footage of that title",
+    )
     video_id: str = Field(description="ID of the chosen video")
     start: float = Field(description="Clip start in seconds")
     end: float = Field(description="Clip end in seconds")

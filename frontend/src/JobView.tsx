@@ -77,7 +77,18 @@ export function JobView({ job }: { job: Job }) {
         })}
       </ol>
 
-      {job.error && <p className="error">{job.error}</p>}
+      {job.missingFootage ? (
+        <div className="card callout">
+          <h3>No footage of this title yet</h3>
+          <p>{job.error}</p>
+          <p className="muted">
+            Use <strong>Upload your video</strong> in the Source list. ClipVoyage only works from
+            footage you have the rights to, and never substitutes a different work.
+          </p>
+        </div>
+      ) : (
+        job.error && <p className="error">{job.error}</p>
+      )}
 
       {job.selection && (
         <p className="muted reason">

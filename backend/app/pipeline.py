@@ -34,6 +34,10 @@ class StepFailed(Exception):
     pass
 
 
+class MissingFootage(Exception):
+    """The request names a title the library has no footage of."""
+
+
 def initial_steps() -> dict[str, dict[str, str]]:
     return {name: {"status": "pending"} for name in STEPS}
 
@@ -237,7 +241,10 @@ class Pipeline:
         ]
         prompt = (
             "Pick the single best video and continuous moment for this promo brief from the "
-            "scene indexes below. The clip will be subtitled, so it must include spoken "
+            "scene indexes below. If the brief names a specific title (requestedTitle), only "
+            "footage of that exact title counts: set titleFound to false when no video is "
+            "that title, even if another video has a similar theme. The clip will be "
+            "subtitled, so it must include spoken "
             "dialogue early on. Start at the start time of a scene. Prefer moments that are "
             "striking without context and that fit current trends.\n"
             f"Brief: {plan.model_dump_json(by_alias=True)}\n"
@@ -246,6 +253,13 @@ class Pipeline:
             f"Library: {json.dumps(catalog, ensure_ascii=False)}"
         )
         sel = self.gemini.structured(self.settings.reasoning_model, [prompt], LibrarySelection)
+        if plan.requested_title and not sel.title_found:
+            # Never pass off a different work as the requested one.
+            raise MissingFootage(
+                f'No footage of "{plan.requested_title}" in the library. Upload official '
+                "footage you have the rights to (e.g. a trailer or gameplay capture), then "
+                "pick it as the source or run Agent picks again."
+            )
         self.video = next((v for v in self.candidates if v.id == sel.video_id), self.video)
         plain = Selection(start=sel.start, end=sel.end, reason=sel.reason)
         return clamp_selection(plain, self.video.duration, plan.max_seconds)
@@ -322,6 +336,15 @@ class Pipeline:
         try:
             self._run()
             self._update({"status": "done", "outputs": self.outputs})
+        except MissingFootage as exc:
+            self._update(
+                {
+                    "status": "failed",
+                    "error": str(exc),
+                    "missingFootage": True,
+                    f"steps.{self.current}": {"status": "failed", "detail": "No matching footage"},
+                }
+            )
         except Exception as exc:
             log.exception("job %s failed", self.job_id)
             self._update(

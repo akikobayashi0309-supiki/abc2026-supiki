@@ -75,6 +75,7 @@ export type Job = JobSummary & {
   clipRange?: { videoId: string; start: number; end: number }
   urls: Partial<Record<'clip' | 'final' | 'keyframe' | 'thumbnail', string>>
   error?: string
+  missingFootage?: boolean
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

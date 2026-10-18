@@ -719,3 +719,8 @@ textarea {
 .market .hashtags {
   margin: 4px 0 0;
 }
+
+.callout {
+  border-left: 4px solid var(--warn);
+  margin: 12px 0;
+}
